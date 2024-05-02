@@ -19,6 +19,7 @@ import graphql.parser;
 import ballerina/cache;
 import ballerina/jballerina.java;
 import ballerina/lang.regexp;
+import ballerina/observe;
 
 isolated function getOutputObjectFromErrorDetail(ErrorDetail|ErrorDetail[] errorDetail) returns OutputObject {
     if errorDetail is ErrorDetail {
@@ -130,7 +131,21 @@ isolated function initCacheTable(ServerCacheConfig? operationCacheConfig, Server
     return;
 }
 
+isolated function addObservabilityTags(string key, string value) {
+    if observabilityEnabled {
+        checkpanic observe:addTagToMetrics(key, value);
+    }
+}
+
 isolated function hasRecordReturnType(service object {} serviceObject, string[] path)
     returns boolean = @java:Method {
     'class: "io.ballerina.stdlib.graphql.runtime.engine.Engine"
+} external;
+
+isolated function setObserverContextManuallyClosed() = @java:Method {
+    'class: "io.ballerina.stdlib.graphql.runtime.engine.ListenerUtils"
+} external;
+
+isolated function stopCurrentObserverContext() returns error? = @java:Method {
+    'class: "io.ballerina.stdlib.graphql.runtime.engine.ListenerUtils"
 } external;
