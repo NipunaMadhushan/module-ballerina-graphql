@@ -38,8 +38,10 @@ import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BString;
+import io.ballerina.runtime.observability.ObserveUtils;
 import io.ballerina.stdlib.graphql.commons.types.Schema;
 import io.ballerina.stdlib.graphql.runtime.exception.ConstraintValidationException;
+import io.ballerina.stdlib.graphql.runtime.observability.GraphqlObserverContext;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -48,8 +50,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import static io.ballerina.runtime.api.constants.RuntimeConstants.CURRENT_TRANSACTION_CONTEXT_PROPERTY;
+import static io.ballerina.runtime.observability.ObservabilityConstants.KEY_OBSERVER_CONTEXT;
 import static io.ballerina.stdlib.graphql.runtime.engine.ArgumentHandler.getEffectiveType;
 import static io.ballerina.stdlib.graphql.runtime.engine.EngineUtils.COLON;
 import static io.ballerina.stdlib.graphql.runtime.engine.EngineUtils.GET_ACCESSOR;
@@ -60,6 +66,11 @@ import static io.ballerina.stdlib.graphql.runtime.engine.EngineUtils.OPERATION_S
 import static io.ballerina.stdlib.graphql.runtime.engine.EngineUtils.RESOURCE_CONFIG;
 import static io.ballerina.stdlib.graphql.runtime.engine.EngineUtils.SUBSCRIBE_ACCESSOR;
 import static io.ballerina.stdlib.graphql.runtime.engine.EngineUtils.isPathsMatching;
+import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObserverContext.IS_ROOT_SERVICE;
+import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObserverContext.KEY_INTERCEPTOR;
+import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObserverContext.MUTATION_OPERATION;
+import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObserverContext.QUERY_OPERATION;
+import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObserverContext.SUBSCRIPTION_OPERATION;
 import static io.ballerina.stdlib.graphql.runtime.utils.ModuleUtils.getModule;
 import static io.ballerina.stdlib.graphql.runtime.utils.Utils.ERROR_TYPE;
 import static io.ballerina.stdlib.graphql.runtime.utils.Utils.INTERCEPTOR_EXECUTION_STRAND;
@@ -128,14 +139,18 @@ public class Engine {
                 ObjectType objectType = (ObjectType) TypeUtils.getReferredType(TypeUtils.getType(service));
                 UnionType typeUnion =
                         TypeCreator.createUnionType(PredefinedTypes.TYPE_STREAM, PredefinedTypes.TYPE_ERROR);
+
+                Map<String, Object> properties = getPropertiesToPropagate(environment, fieldObject,
+                        SUBSCRIPTION_OPERATION);
+
                 if (objectType.isIsolated() && objectType.isIsolated(resourceMethod.getName())) {
                     environment.getRuntime()
                             .invokeMethodAsyncConcurrently(service, resourceMethod.getName(), null,
-                                    null, executionCallback, null, typeUnion, args);
+                                    null, executionCallback, properties, typeUnion, args);
                 } else {
                     environment.getRuntime()
                             .invokeMethodAsyncSequentially(service, resourceMethod.getName(), null,
-                                    null, executionCallback, null, typeUnion, args);
+                                    null, executionCallback, properties, typeUnion, args);
                 }
                 return null;
             }
@@ -161,14 +176,20 @@ public class Engine {
         ServiceType serviceType = (ServiceType) TypeUtils.getType(service);
         Type returnType = TypeCreator.createUnionType(PredefinedTypes.TYPE_ANY, PredefinedTypes.TYPE_NULL);
         Object[] arguments = argumentHandler.getArguments();
+
+
+//        Map<String, Object> properties = getPropertiesToPropagate(environment, fieldObject, QUERY_OPERATION);
+        GraphqlObserverContext observerContext = new GraphqlObserverContext(QUERY_OPERATION);
+        observerContext.setManuallyClosed(true);
+        Map<String, Object> properties = new HashMap<>();
+        properties.put(KEY_OBSERVER_CONTEXT, observerContext);
+
         if (serviceType.isIsolated() && serviceType.isIsolated(resourceMethod.getName())) {
             environment.getRuntime().invokeMethodAsyncConcurrently(service, resourceMethod.getName(), null,
-                    RESOURCE_EXECUTION_STRAND, executionCallback,
-                    null, returnType, arguments);
+                    RESOURCE_EXECUTION_STRAND, executionCallback, properties, returnType, arguments);
         } else {
             environment.getRuntime().invokeMethodAsyncSequentially(service, resourceMethod.getName(), null,
-                    RESOURCE_EXECUTION_STRAND, executionCallback,
-                    null, returnType, arguments);
+                    RESOURCE_EXECUTION_STRAND, executionCallback, properties, returnType, arguments);
         }
         return null;
     }
@@ -190,14 +211,17 @@ public class Engine {
                 ExecutionCallback executionCallback = new ExecutionCallback(future);
                 Type returnType = TypeCreator.createUnionType(PredefinedTypes.TYPE_ANY, PredefinedTypes.TYPE_NULL);
                 Object[] arguments = argumentHandler.getArguments();
+
+                Map<String, Object> properties = getPropertiesToPropagate(environment, fieldObject, MUTATION_OPERATION);
+
                 if (serviceType.isIsolated() && serviceType.isIsolated(remoteMethod.getName())) {
                     environment.getRuntime().invokeMethodAsyncConcurrently(service, remoteMethod.getName(), null,
                             REMOTE_EXECUTION_STRAND, executionCallback,
-                            null, returnType, arguments);
+                            properties, returnType, arguments);
                 } else {
                     environment.getRuntime().invokeMethodAsyncSequentially(service, remoteMethod.getName(), null,
                             REMOTE_EXECUTION_STRAND, executionCallback,
-                            null, returnType, arguments);
+                            properties, returnType, arguments);
                 }
                 return null;
             }
@@ -216,14 +240,20 @@ public class Engine {
         ExecutionCallback executionCallback = new ExecutionCallback(future);
         Type returnType = TypeCreator.createUnionType(PredefinedTypes.TYPE_ANY, PredefinedTypes.TYPE_NULL);
         Object[] arguments = getInterceptorArguments(context, field);
+
+        Map<String, Object> properties = getPropertiesToPropagate(environment, field, null);
+        if (properties != null) {
+            properties.put(KEY_INTERCEPTOR, true);
+        }
+
         if (serviceType.isIsolated() && serviceType.isIsolated(remoteMethod.getName())) {
             environment.getRuntime().invokeMethodAsyncConcurrently(interceptor, remoteMethod.getName(), null,
                                                                    INTERCEPTOR_EXECUTION_STRAND, executionCallback,
-                                                                   null, returnType, arguments);
+                                                                   properties, returnType, arguments);
         } else {
             environment.getRuntime().invokeMethodAsyncSequentially(interceptor, remoteMethod.getName(), null,
                                                                    INTERCEPTOR_EXECUTION_STRAND, executionCallback,
-                                                                   null, returnType, arguments);
+                                                                   properties, returnType, arguments);
         }
         return null;
     }
@@ -320,14 +350,17 @@ public class Engine {
         ServiceType serviceType = (ServiceType) TypeUtils.getType(service);
         ArgumentHandler argumentHandler = new ArgumentHandler(resourceMethod, context, fieldObject, null, false);
         Object[] arguments = argumentHandler.getArguments();
+
+        Map<String, Object> properties = getPropertiesToPropagate(environment, fieldObject, null);
+
         if (serviceType.isIsolated() && serviceType.isIsolated(resourceMethod.getName())) {
             environment.getRuntime()
                     .invokeMethodAsyncConcurrently(service, resourceMethod.getName(), null, RESOURCE_EXECUTION_STRAND,
-                                                   executionCallback, null, null, arguments);
+                                                   executionCallback, properties, null, arguments);
         } else {
             environment.getRuntime()
                     .invokeMethodAsyncSequentially(service, resourceMethod.getName(), null, RESOURCE_EXECUTION_STRAND,
-                                                   executionCallback, null, null, arguments);
+                                                   executionCallback, properties, null, arguments);
         }
     }
 
@@ -353,5 +386,37 @@ public class Engine {
             return isRecordReturnType(TypeUtils.getReferredType(returnType));
         }
         return returnType.getTag() == TypeTags.RECORD_TYPE_TAG;
+    }
+
+    public static Map<String, Object> getPropertiesToPropagate(Environment env, BObject fieldObject,
+                                                               String operationType) {
+        Map<String, Object> properties = null;
+
+        String[] keys = {CURRENT_TRANSACTION_CONTEXT_PROPERTY, KEY_OBSERVER_CONTEXT, KEY_INTERCEPTOR};
+        Map<String, Object> currentStrandProperties = new HashMap<>();
+        for (String key : keys) {
+            Object value = env.getStrandLocal(key);
+            if (value != null) {
+                currentStrandProperties.put(key, value);
+            }
+        }
+        if (ObserveUtils.isObservabilityEnabled()) {
+            if ((currentStrandProperties.get(KEY_INTERCEPTOR) == null ||
+                    !((boolean) currentStrandProperties.get(KEY_INTERCEPTOR))) &&
+                    fieldObject.getBooleanValue(StringUtils.fromString(IS_ROOT_SERVICE))) {
+                properties = new HashMap<>();
+                GraphqlObserverContext observerContext;
+                if (operationType != null) {
+                    observerContext = new GraphqlObserverContext(operationType);
+                } else {
+                    observerContext = new GraphqlObserverContext();
+                }
+                env.setStrandLocal(KEY_OBSERVER_CONTEXT, observerContext);
+                properties.put(KEY_OBSERVER_CONTEXT, observerContext);
+            } else {
+                properties = currentStrandProperties;
+            }
+        }
+        return properties;
     }
 }

@@ -86,14 +86,14 @@ isolated function isValidReturnType(__Type 'type, anydata value) returns boolean
 }
 
 isolated function getFieldObject(parser:FieldNode fieldNode, parser:RootOperationType operationType, __Schema schema,
-                                 Engine engine, any|error fieldValue = ()) returns Field {
+                                 Engine engine, any|error fieldValue = (), boolean isRootService = false) returns Field {
     (string|int)[] path = [fieldNode.getAlias()];
     string operationTypeName = getOperationTypeNameFromOperationType(operationType);
     __Type parentType = <__Type>getTypeFromTypeArray(schema.types, operationTypeName);
     __Type fieldType = getFieldTypeFromParentType(parentType, schema.types, fieldNode);
     string parentArgHashes = generateArgHash(fieldNode.getArguments());
     return new (fieldNode, fieldType, engine.getService(), path, operationType, fieldValue = fieldValue,
-                cacheConfig = engine.getCacheConfig(), parentArgHashes = [parentArgHashes]);
+                cacheConfig = engine.getCacheConfig(), parentArgHashes = [parentArgHashes], isRootService = isRootService);
 }
 
 isolated function createSchema(string schemaString) returns readonly & __Schema|Error = @java:Method {
@@ -140,4 +140,12 @@ isolated function addObservabilityTags(string key, string value) {
 isolated function hasRecordReturnType(service object {} serviceObject, string[] path)
     returns boolean = @java:Method {
     'class: "io.ballerina.stdlib.graphql.runtime.engine.Engine"
+} external;
+
+isolated function setObserverContextManuallyClosed() = @java:Method {
+    'class: "io.ballerina.stdlib.graphql.runtime.engine.ListenerUtils"
+} external;
+
+isolated function stopCurrentObserverContext() returns error? = @java:Method {
+    'class: "io.ballerina.stdlib.graphql.runtime.engine.ListenerUtils"
 } external;

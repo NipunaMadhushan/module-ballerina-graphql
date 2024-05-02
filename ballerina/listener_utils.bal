@@ -71,6 +71,7 @@ isolated function getResponseFromJsonPayload(Engine engine, Context context, htt
 isolated function getResponseFromQuery(Engine engine, string document, string? operationName, map<json>? variables,
         Context context, map<Upload|Upload[]> fileInfo = {}) returns http:Response {
     parser:OperationNode|OutputObject validationResult = engine.validate(document, operationName, variables);
+    // error? x = stopCurrentObserverContext();
     if validationResult is parser:OperationNode {
         context.setFileInfo(fileInfo);
         return getResponseFromExecution(engine, validationResult, context);
@@ -292,7 +293,12 @@ isolated function getHttpService(Engine gqlEngine, GraphqlServiceConfig? service
 
     HttpService httpService = @http:ServiceConfig {
         cors: corsConfig
-    } isolated service object {
+    }
+    @display {
+        label: "graphql-service",
+        id: "graphql-service"
+    }
+    isolated service object {
         private final Engine engine = gqlEngine;
         private final readonly & ListenerAuthConfig[]? authConfig = authConfigurations;
         private final ContextInit contextInit = contextInitFunction;

@@ -18,10 +18,13 @@
 
 package io.ballerina.stdlib.graphql.runtime.engine;
 
+import io.ballerina.runtime.api.Environment;
 import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BString;
+import io.ballerina.runtime.observability.ObserveUtils;
+import io.ballerina.runtime.observability.ObserverContext;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -144,5 +147,22 @@ public final class ListenerUtils {
         } catch (IOException e) {
             return createError("Error occurred while loading the GraphiQL client", ERROR_TYPE);
         }
+    }
+
+    public static void setObserverContextManuallyClosed(Environment env) {
+        ObserverContext observerContext = ObserveUtils.getObserverContextOfCurrentFrame(env);
+        if (observerContext != null) {
+            observerContext.setManuallyClosed(true);
+        }
+    }
+
+    public static Object stopCurrentObserverContext(Environment env) {
+        System.Logger logger = System.getLogger("ListenerUtils");
+        logger.log(System.Logger.Level.DEBUG, "Stopping the current observer context");
+        ObserverContext observerContext = ObserveUtils.getObserverContextOfCurrentFrame(env);
+        if (observerContext != null && observerContext.isManuallyClosed()) {
+            ObserveUtils.stopObservationWithContext(observerContext);
+        }
+        return null;
     }
 }

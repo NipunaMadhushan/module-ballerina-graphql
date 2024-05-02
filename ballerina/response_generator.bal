@@ -40,6 +40,7 @@ class ResponseGenerator {
 
     isolated function getResult(any|error parentValue, parser:FieldNode parentNode)
     returns anydata {
+        error? x = stopCurrentObserverContext();
         if parentValue is ErrorDetail {
             return;
         }
@@ -233,7 +234,7 @@ class ResponseGenerator {
         }
     }
 
-    private isolated function isPossibleTypeOfInterface(string interfaceName, 
+    private isolated function isPossibleTypeOfInterface(string interfaceName,
                                                         string implementedTypeName) returns boolean {
         __Type? interfaceType = getTypeFromTypeArray(self.engine.getSchema().types, interfaceName);
         if interfaceType is () || interfaceType.kind != INTERFACE {
