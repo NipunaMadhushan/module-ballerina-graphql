@@ -1,7 +1,7 @@
 package io.ballerina.stdlib.graphql.runtime.observability;
 
 public class GraphqlObservabilityConstants {
-    public static final String IS_MAIN_SERVICE = "isMainServiceObject";
+    public static final String IS_ROOT_SERVICE = "isRootService";
     public static final String KEY_INTERCEPTOR = "__interceptor__";
 
     // Runtime related constants

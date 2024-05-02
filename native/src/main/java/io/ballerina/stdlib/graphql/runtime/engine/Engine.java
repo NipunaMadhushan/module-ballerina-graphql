@@ -39,6 +39,7 @@ import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BString;
 import io.ballerina.runtime.observability.ObserveUtils;
+import io.ballerina.runtime.observability.ObserverContext;
 import io.ballerina.stdlib.graphql.commons.types.Schema;
 import io.ballerina.stdlib.graphql.runtime.exception.ConstraintValidationException;
 import io.ballerina.stdlib.graphql.runtime.observability.GraphqlObserverContext;
@@ -67,7 +68,7 @@ import static io.ballerina.stdlib.graphql.runtime.engine.EngineUtils.RESOURCE_CO
 import static io.ballerina.stdlib.graphql.runtime.engine.EngineUtils.SUBSCRIBE_ACCESSOR;
 import static io.ballerina.stdlib.graphql.runtime.engine.EngineUtils.isPathsMatching;
 import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObservabilityConstants.QUERY_OPERATION;
-import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObservabilityConstants.IS_MAIN_SERVICE;
+import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObservabilityConstants.IS_ROOT_SERVICE;
 import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObservabilityConstants.KEY_INTERCEPTOR;
 import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObservabilityConstants.MUTATION_OPERATION;
 import static io.ballerina.stdlib.graphql.runtime.observability.GraphqlObservabilityConstants.SUBSCRIPTION_OPERATION;
@@ -140,17 +141,8 @@ public class Engine {
                 UnionType typeUnion =
                         TypeCreator.createUnionType(PredefinedTypes.TYPE_STREAM, PredefinedTypes.TYPE_ERROR);
 
-                Map<String, Object> properties = null;
-                if (ObserveUtils.isObservabilityEnabled()) {
-                    if (fieldObject.getBooleanValue(StringUtils.fromString(IS_MAIN_SERVICE))) {
-                        properties = new HashMap<>();
-                        GraphqlObserverContext observerContext = new GraphqlObserverContext(SUBSCRIPTION_OPERATION);
-                        environment.setStrandLocal(KEY_OBSERVER_CONTEXT, observerContext);
-                        properties.put(KEY_OBSERVER_CONTEXT, observerContext);
-                    } else {
-                        properties = getPropertiesToPropagate(environment);
-                    }
-                }
+                Map<String, Object> properties = getPropertiesToPropagate(environment, fieldObject,
+                        SUBSCRIPTION_OPERATION);
 
                 if (objectType.isIsolated() && objectType.isIsolated(resourceMethod.getName())) {
                     environment.getRuntime()
@@ -186,19 +178,12 @@ public class Engine {
         Type returnType = TypeCreator.createUnionType(PredefinedTypes.TYPE_ANY, PredefinedTypes.TYPE_NULL);
         Object[] arguments = argumentHandler.getArguments();
 
-        Map<String, Object> properties = null;
-        if (ObserveUtils.isObservabilityEnabled()) {
-            if ((getPropertiesToPropagate(environment).get(KEY_INTERCEPTOR) == null ||
-                    !((boolean) getPropertiesToPropagate(environment).get(KEY_INTERCEPTOR))) &&
-                    fieldObject.getBooleanValue(StringUtils.fromString(IS_MAIN_SERVICE))) {
-                properties = new HashMap<>();
-                GraphqlObserverContext observerContext = new GraphqlObserverContext(QUERY_OPERATION);
-                environment.setStrandLocal(KEY_OBSERVER_CONTEXT, observerContext);
-                properties.put(KEY_OBSERVER_CONTEXT, observerContext);
-            } else {
-                properties = getPropertiesToPropagate(environment);
-            }
-        }
+
+//        Map<String, Object> properties = getPropertiesToPropagate(environment, fieldObject, QUERY_OPERATION);
+        GraphqlObserverContext observerContext = new GraphqlObserverContext(QUERY_OPERATION);
+        observerContext.setManuallyClosed(true);
+        Map<String, Object> properties = new HashMap<>();
+        properties.put(KEY_OBSERVER_CONTEXT, observerContext);
 
         if (serviceType.isIsolated() && serviceType.isIsolated(resourceMethod.getName())) {
             environment.getRuntime().invokeMethodAsyncConcurrently(service, resourceMethod.getName(), null,
@@ -228,17 +213,7 @@ public class Engine {
                 Type returnType = TypeCreator.createUnionType(PredefinedTypes.TYPE_ANY, PredefinedTypes.TYPE_NULL);
                 Object[] arguments = argumentHandler.getArguments();
 
-                Map<String, Object> properties = null;
-                if (ObserveUtils.isObservabilityEnabled()) {
-                    if (fieldObject.getBooleanValue(StringUtils.fromString(IS_MAIN_SERVICE))) {
-                        properties = new HashMap<>();
-                        GraphqlObserverContext observerContext = new GraphqlObserverContext(MUTATION_OPERATION);
-                        environment.setStrandLocal(KEY_OBSERVER_CONTEXT, observerContext);
-                        properties.put(KEY_OBSERVER_CONTEXT, observerContext);
-                    } else {
-                        properties = getPropertiesToPropagate(environment);
-                    }
-                }
+                Map<String, Object> properties = getPropertiesToPropagate(environment, fieldObject, MUTATION_OPERATION);
 
                 if (serviceType.isIsolated() && serviceType.isIsolated(remoteMethod.getName())) {
                     environment.getRuntime().invokeMethodAsyncConcurrently(service, remoteMethod.getName(), null,
@@ -267,16 +242,8 @@ public class Engine {
         Type returnType = TypeCreator.createUnionType(PredefinedTypes.TYPE_ANY, PredefinedTypes.TYPE_NULL);
         Object[] arguments = getInterceptorArguments(context, field);
 
-        Map<String, Object> properties = null;
-        if (ObserveUtils.isObservabilityEnabled()) {
-            if (field.getBooleanValue(StringUtils.fromString(IS_MAIN_SERVICE))) {
-                properties = new HashMap<>();
-                GraphqlObserverContext observerContext = new GraphqlObserverContext();
-                environment.setStrandLocal(KEY_OBSERVER_CONTEXT, observerContext);
-                properties.put(KEY_OBSERVER_CONTEXT, observerContext);
-            } else {
-                properties = getPropertiesToPropagate(environment);
-            }
+        Map<String, Object> properties = getPropertiesToPropagate(environment, field, null);
+        if (properties != null) {
             properties.put(KEY_INTERCEPTOR, true);
         }
 
@@ -385,17 +352,7 @@ public class Engine {
         ArgumentHandler argumentHandler = new ArgumentHandler(resourceMethod, context, fieldObject, null, false);
         Object[] arguments = argumentHandler.getArguments();
 
-        Map<String, Object> properties = null;
-        if (ObserveUtils.isObservabilityEnabled()) {
-            if (fieldObject.getBooleanValue(StringUtils.fromString(IS_MAIN_SERVICE))) {
-                properties = new HashMap<>();
-                GraphqlObserverContext observerContext = new GraphqlObserverContext();
-                environment.setStrandLocal(KEY_OBSERVER_CONTEXT, observerContext);
-                properties.put(KEY_OBSERVER_CONTEXT, observerContext);
-            } else {
-                properties = getPropertiesToPropagate(environment);
-            }
-        }
+        Map<String, Object> properties = getPropertiesToPropagate(environment, fieldObject, null);
 
         if (serviceType.isIsolated() && serviceType.isIsolated(resourceMethod.getName())) {
             environment.getRuntime()
@@ -432,16 +389,35 @@ public class Engine {
         return returnType.getTag() == TypeTags.RECORD_TYPE_TAG;
     }
 
-    public static Map<String, Object> getPropertiesToPropagate(Environment env) {
-        String[] keys = {CURRENT_TRANSACTION_CONTEXT_PROPERTY, KEY_OBSERVER_CONTEXT, KEY_INTERCEPTOR};
+    public static Map<String, Object> getPropertiesToPropagate(Environment env, BObject fieldObject,
+                                                               String operationType) {
+        Map<String, Object> properties = null;
 
-        Map<String, Object> subMap = new HashMap<>();
+        String[] keys = {CURRENT_TRANSACTION_CONTEXT_PROPERTY, KEY_OBSERVER_CONTEXT, KEY_INTERCEPTOR};
+        Map<String, Object> currentStrandProperties = new HashMap<>();
         for (String key : keys) {
             Object value = env.getStrandLocal(key);
             if (value != null) {
-                subMap.put(key, value);
+                currentStrandProperties.put(key, value);
             }
         }
-        return subMap;
+        if (ObserveUtils.isObservabilityEnabled()) {
+            if ((currentStrandProperties.get(KEY_INTERCEPTOR) == null ||
+                    !((boolean) currentStrandProperties.get(KEY_INTERCEPTOR))) &&
+                    fieldObject.getBooleanValue(StringUtils.fromString(IS_ROOT_SERVICE))) {
+                properties = new HashMap<>();
+                GraphqlObserverContext observerContext;
+                if (operationType != null) {
+                    observerContext = new GraphqlObserverContext(operationType);
+                } else {
+                    observerContext = new GraphqlObserverContext();
+                }
+                env.setStrandLocal(KEY_OBSERVER_CONTEXT, observerContext);
+                properties.put(KEY_OBSERVER_CONTEXT, observerContext);
+            } else {
+                properties = currentStrandProperties;
+            }
+        }
+        return properties;
     }
 }

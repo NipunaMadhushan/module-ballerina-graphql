@@ -85,14 +85,14 @@ isolated function isValidReturnType(__Type 'type, anydata value) returns boolean
 }
 
 isolated function getFieldObject(parser:FieldNode fieldNode, parser:RootOperationType operationType, __Schema schema,
-                                 Engine engine, any|error fieldValue = ()) returns Field {
+                                 Engine engine, any|error fieldValue = (), boolean isRootService = false) returns Field {
     (string|int)[] path = [fieldNode.getAlias()];
     string operationTypeName = getOperationTypeNameFromOperationType(operationType);
     __Type parentType = <__Type>getTypeFromTypeArray(schema.types, operationTypeName);
     __Type fieldType = getFieldTypeFromParentType(parentType, schema.types, fieldNode);
     string parentArgHashes = generateArgHash(fieldNode.getArguments());
     return new (fieldNode, fieldType, engine.getService(), path, operationType, fieldValue = fieldValue,
-                cacheConfig = engine.getCacheConfig(), parentArgHashes = [parentArgHashes]);
+                cacheConfig = engine.getCacheConfig(), parentArgHashes = [parentArgHashes], isRootService = isRootService);
 }
 
 isolated function createSchema(string schemaString) returns readonly & __Schema|Error = @java:Method {

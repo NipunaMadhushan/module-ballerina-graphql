@@ -76,17 +76,15 @@ public final class QueryExecutor {
     private static Object invokeClientMethod(Environment env, BObject client, String methodName, Object[] paramFeed) {
         Future balFuture = env.markAsync();
 
-        Map<String, Object> properties = getPropertiesToPropagate(env);
-
         ObjectType clientType = (ObjectType) TypeUtils.getReferredType(TypeUtils.getType(client));
         if (clientType.isIsolated() && clientType.isIsolated(methodName)) {
             env.getRuntime()
                     .invokeMethodAsyncConcurrently(client, methodName, null, null, new QueryExecutorCallback(balFuture),
-                            properties, PredefinedTypes.TYPE_NULL, paramFeed);
+                            null, PredefinedTypes.TYPE_NULL, paramFeed);
         } else {
             env.getRuntime()
                     .invokeMethodAsyncSequentially(client, methodName, null, null, new QueryExecutorCallback(balFuture),
-                            properties, PredefinedTypes.TYPE_NULL, paramFeed);
+                            null, PredefinedTypes.TYPE_NULL, paramFeed);
         }
         return null;
     }

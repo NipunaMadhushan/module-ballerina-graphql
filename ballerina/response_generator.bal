@@ -17,6 +17,7 @@
 import ballerina/log;
 
 import graphql.parser;
+import ballerina/jballerina.java;
 
 class ResponseGenerator {
     private final Engine engine;
@@ -40,6 +41,7 @@ class ResponseGenerator {
 
     isolated function getResult(any|error parentValue, parser:FieldNode parentNode)
     returns anydata {
+        error? x = stopCurrentObserverContext();
         if parentValue is ErrorDetail {
             return;
         }
@@ -246,3 +248,11 @@ class ResponseGenerator {
         return getTypeFromTypeArray(possibleTypes, implementedTypeName) is __Type;
     }
 }
+
+isolated function setObserverContextManuallyClosed() = @java:Method {
+    'class: "io.ballerina.stdlib.graphql.runtime.engine.ListenerUtils"
+} external;
+
+isolated function stopCurrentObserverContext() returns error? = @java:Method {
+    'class: "io.ballerina.stdlib.graphql.runtime.engine.ListenerUtils"
+} external;
