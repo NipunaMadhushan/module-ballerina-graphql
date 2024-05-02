@@ -27,6 +27,10 @@ import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BString;
 import io.ballerina.runtime.api.values.BTypedesc;
 
+import java.util.Map;
+
+import static io.ballerina.stdlib.graphql.runtime.engine.Engine.getPropertiesToPropagate;
+
 /**
  * This class is used to execute a GraphQL document using the Ballerina GraphQL client.
  */
